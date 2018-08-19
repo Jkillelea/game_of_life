@@ -2,7 +2,7 @@ extern crate rand;
 extern crate png;
 
 use std::path::Path;
-use std::fs::File;
+use std::fs::{self, File};
 use std::io;
 use std::env;
 use png::HasParameters;
@@ -12,7 +12,7 @@ use std::sync::mpsc;
 
 const WIDTH:    usize = 1920;
 const HEIGHT:   usize = 1080;
-const DEFAULT_ITER_MAX: usize = 1000;
+const DEFAULT_ITER_MAX: usize = 100;
 
 fn main() {
     let iter_max: usize = env::args().nth(1)
@@ -37,23 +37,31 @@ fn main() {
     for iteration in 1..=iter_max {
         println!("{}/{}", iteration, iter_max);
 
-        for r in 0..HEIGHT {
-            for c in 0..WIDTH {
-                game_of_life(&board, &mut next_board, r, c);
-            }
+        // precursor to multithreading support here
+        for (i, _) in board.iter().enumerate() {
+            let (row, col) = (i / WIDTH, i % WIDTH);
+            game_of_life(&board, &mut next_board, row, col);
         }
 
         // png_write(iteration, next_board.to_vec()).unwrap();
-        tx.send(Some((iteration, next_board.to_vec()))).unwrap();
+        tx.send(Some((iteration, next_board.to_vec())))
+           .expect("Failed to send on pipe!");
 
-        board = next_board;
+        // I guess there's an implicit copy here since we keep two references here
+        // and can read from one while writing to the other. In order to keep Rust's
+        // rules intact, they can't point to the same memory 
+        board = next_board; 
     }
 
-    tx.send(None).unwrap();
-    writer_thread.join().unwrap();
+    // kill the thread and clean up
+    tx.send(None).expect("Failed to send on pipe!");
+    writer_thread.join().expect("Thread panicked!");
 }
 
+// core game logic
 fn game_of_life(board: &[u8], next_board: &mut [u8], r: usize, c: usize) {
+    // there's an overflow chance here, but as long as the gameboard only holds ones or zeros
+    // it shouldn't be an issue
     let count_neighbors: u8 = [
         get_offset(&board, r, c,  0,  1),
         get_offset(&board, r, c,  1,  1),
@@ -65,8 +73,7 @@ fn game_of_life(board: &[u8], next_board: &mut [u8], r: usize, c: usize) {
         get_offset(&board, r, c, -1,  1),
     ].iter().sum();
 
-    // println!("{}", count_neighbors);
-
+    // set the cell at offset (r, c) to a value based on count_neighbors
     if get_offset(&board, r, c, 0, 0) != 0 { // live cell
         if count_neighbors == 2 ||  count_neighbors == 3 {
             next_board[r*WIDTH + c] = 1
@@ -82,6 +89,7 @@ fn game_of_life(board: &[u8], next_board: &mut [u8], r: usize, c: usize) {
     }
 }
 
+#[inline]
 fn get_offset(board: &[u8], r: usize, c: usize, dc: i32, dr: i32) -> u8 {
     let row = r as i32 + dr;
     let col = c as i32 + dc;
@@ -104,18 +112,23 @@ fn randomize(board: &mut [u8]) {
     }
 }
 
+// all the image writing. Most of this code is taken from the png crate readme
 fn png_write(name: usize, data: Vec<u8>) -> io::Result<()> {
+    let _ = fs::create_dir("images");
     let pathname = format!("images/{}.png", name);
     let path = Path::new(&pathname);
     let file = File::create(path)?;
-    // let ref mut w = BufWriter::new(file);
-    // let mut encoder = png::Encoder::new(w, WIDTH as u32, HEIGHT as u32);
+
     let mut encoder = png::Encoder::new(file, WIDTH as u32, HEIGHT as u32);
+    
     encoder.set(png::ColorType::Grayscale).set(png::BitDepth::Eight);
+    
     let mut writer = encoder.write_header()?;
 
+    // 255 = white, 0 = black
     let image_data: Vec<u8> = data.iter().map(|val| if *val != 0 {255} else {0}).collect();
 
     writer.write_image_data(&image_data)?; // Save
+    
     Ok(())
 }
