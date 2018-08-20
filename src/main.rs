@@ -37,6 +37,8 @@ fn main() {
         }
     });
 
+    let start = std::time::Instant::now();
+    
     // main loop
     for iteration in 1..=iter_max {
         println!("{}/{}", iteration, iter_max);
@@ -57,6 +59,9 @@ fn main() {
         // unsafe {std::ptr::swap(&mut board, &mut next_board)};
         board = next_board;
     }
+
+    let end = std::time::Instant::now();
+    println!("--Completed in {:?}--", end-start);
 
     // kill the thread and clean up
     tx.send(None).expect("Failed to send on pipe!");
