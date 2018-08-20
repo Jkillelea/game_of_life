@@ -47,7 +47,6 @@ fn main() {
             game_of_life(&board, &mut next_board, row, col);
         }
 
-
         // png_write(iteration, next_board.to_vec()).unwrap();
         tx.send(Some((iteration, next_board.to_vec())))
            .expect("Failed to send on pipe!");
