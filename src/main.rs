@@ -1,39 +1,43 @@
 extern crate rand;
 extern crate png;
 
-use std::path::Path;
-use std::fs::{self, File};
 use std::io;
 use std::env;
-use png::HasParameters;
-
 use std::thread;
 use std::sync::mpsc;
+use std::path::Path;
+use std::fs::{self, File};
+use png::HasParameters;
 
 const WIDTH:    usize = 1920;
 const HEIGHT:   usize = 1080;
 const DEFAULT_ITER_MAX: usize = 100;
 
 fn main() {
+    // TODO -> .do these obey copy rules? We can assign one to the other and
+    // then keep on writing to the first. Doesn't obey move semantics...
+    let mut board      = [0u8; WIDTH*HEIGHT];
+    let mut next_board = [0u8; WIDTH*HEIGHT];
+
+    let (tx, rx) = mpsc::channel();
+
     let iter_max: usize = env::args().nth(1)
                                      .unwrap_or(format!("{}", DEFAULT_ITER_MAX))
                                      .parse()
                                      .unwrap();
 
-    let mut board      = [0u8; WIDTH*HEIGHT];
-    let mut next_board = [0u8; WIDTH*HEIGHT];
-
+    // initialize and save first board
     randomize(&mut board);
 
     png_write(0, board.to_vec()).unwrap();
 
-    let (tx, rx) = mpsc::channel();
     let writer_thread = thread::spawn(move || {
         while let Ok(Some((iteration, data))) = rx.recv() {
             png_write(iteration, data).unwrap();
         }
     });
 
+    // main loop
     for iteration in 1..=iter_max {
         println!("{}/{}", iteration, iter_max);
 
@@ -43,14 +47,16 @@ fn main() {
             game_of_life(&board, &mut next_board, row, col);
         }
 
+
         // png_write(iteration, next_board.to_vec()).unwrap();
         tx.send(Some((iteration, next_board.to_vec())))
            .expect("Failed to send on pipe!");
 
-        // I guess there's an implicit copy here since we keep two references here
+        // I guess there's an implicit copy here since we keep two references
         // and can read from one while writing to the other. In order to keep Rust's
         // rules intact, they can't point to the same memory 
-        board = next_board; 
+        // unsafe {std::ptr::swap(&mut board, &mut next_board)};
+        board = next_board;
     }
 
     // kill the thread and clean up
@@ -89,7 +95,6 @@ fn game_of_life(board: &[u8], next_board: &mut [u8], r: usize, c: usize) {
     }
 }
 
-#[inline]
 fn get_offset(board: &[u8], r: usize, c: usize, dc: i32, dr: i32) -> u8 {
     let row = r as i32 + dr;
     let col = c as i32 + dc;
@@ -129,6 +134,6 @@ fn png_write(name: usize, data: Vec<u8>) -> io::Result<()> {
     let image_data: Vec<u8> = data.iter().map(|val| if *val != 0 {255} else {0}).collect();
 
     writer.write_image_data(&image_data)?; // Save
-    
+
     Ok(())
 }
