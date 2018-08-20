@@ -1,4 +1,6 @@
+#![allow(warnings)]
 extern crate rand;
+extern crate ocl;
 extern crate png;
 
 use std::io;
@@ -16,8 +18,7 @@ const DEFAULT_ITER_MAX: usize = 100;
 fn main() {
     // TODO -> .do these obey copy rules? We can assign one to the other and
     // then keep on writing to the first. Doesn't obey move semantics...
-    let mut board      = [0u8; WIDTH*HEIGHT];
-    let mut next_board = [0u8; WIDTH*HEIGHT];
+    let mut board      = vec![0u8; WIDTH*HEIGHT];
 
     let (tx, rx) = mpsc::channel();
 
@@ -37,26 +38,43 @@ fn main() {
         }
     });
 
+
+    let cl_source = include_str!("life.cl");
+
+    let pro_que = ocl::ProQue::builder()
+                                .src(cl_source)
+                                .dims(ocl::SpatialDims::Two(WIDTH, HEIGHT))
+                                .build().unwrap();
+
+    let buffer_in = pro_que.create_buffer::<u8>().unwrap();
+    let buffer_out = pro_que.create_buffer::<u8>().unwrap();
+
+    let kernel = pro_que.kernel_builder("life")
+                        .arg(&buffer_in)
+                        .arg(&buffer_out)
+                        .build().unwrap();
+
     // main loop
+    let start = std::time::Instant::now();
+
     for iteration in 1..=iter_max {
         println!("{}/{}", iteration, iter_max);
+        let mut next_board = vec![0u8; WIDTH*HEIGHT];
 
-        // precursor to multithreading support here
-        for (i, _) in board.iter().enumerate() {
-            let (row, col) = (i / WIDTH, i % WIDTH);
-            game_of_life(&board, &mut next_board, row, col);
-        }
+        buffer_in.write(&board).enq().unwrap();
 
-        // png_write(iteration, next_board.to_vec()).unwrap();
+        unsafe { kernel.enq().unwrap() };
+
+        buffer_out.read(&mut next_board).enq().unwrap();
+
         tx.send(Some((iteration, next_board.to_vec())))
            .expect("Failed to send on pipe!");
 
-        // I guess there's an implicit copy here since we keep two references
-        // and can read from one while writing to the other. In order to keep Rust's
-        // rules intact, they can't point to the same memory 
-        // unsafe {std::ptr::swap(&mut board, &mut next_board)};
         board = next_board;
     }
+
+    let end = std::time::Instant::now();
+    println!("--Completed in {:?}--", end-start);
 
     // kill the thread and clean up
     tx.send(None).expect("Failed to send on pipe!");
