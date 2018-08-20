@@ -16,34 +16,32 @@ const HEIGHT:   usize = 1080;
 const DEFAULT_ITER_MAX: usize = 100;
 
 fn main() {
-    // TODO -> .do these obey copy rules? We can assign one to the other and
-    // then keep on writing to the first. Doesn't obey move semantics...
-    let mut board      = vec![0u8; WIDTH*HEIGHT];
-
+    let mut board = vec![0u8; WIDTH*HEIGHT];
     let (tx, rx) = mpsc::channel();
-
     let iter_max: usize = env::args().nth(1)
                                      .unwrap_or(format!("{}", DEFAULT_ITER_MAX))
                                      .parse()
                                      .unwrap();
 
-    // initialize and save first board
-    randomize(&mut board);
-
-    png_write(0, board.to_vec()).unwrap();
-
+    // thread for saving all the images
     let writer_thread = thread::spawn(move || {
         while let Ok(Some((iteration, data))) = rx.recv() {
             png_write(iteration, data).unwrap();
         }
     });
 
+    // initialize and save first board
+    randomize(&mut board);
+
+    tx.send( Some( (0, board.to_vec()) ) ).unwrap();
+    // png_write(0, board.to_vec()).unwrap();
+
 
     let cl_source = include_str!("life.cl");
 
     let pro_que = ocl::ProQue::builder()
                                 .src(cl_source)
-                                .dims(ocl::SpatialDims::Two(WIDTH, HEIGHT))
+                                .dims((WIDTH, HEIGHT))
                                 .build().unwrap();
 
     let buffer_in = pro_que.create_buffer::<u8>().unwrap();
