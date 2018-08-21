@@ -35,19 +35,16 @@ fn main() {
 
     png_write(0, board.to_vec()).unwrap();
 
+    // OpenCL initialization
     let cl_source = include_str!("life.cl");
 
-    let pro_que = ocl::ProQue::builder()
-                                .src(cl_source)
-                                .dims((WIDTH, HEIGHT))
+    let pro_que = ocl::ProQue::builder().src(cl_source).dims((WIDTH, HEIGHT))
                                 .build().unwrap();
 
     let buffer_in = pro_que.create_buffer::<u8>().unwrap();
     let buffer_out = pro_que.create_buffer::<u8>().unwrap();
 
-    let kernel = pro_que.kernel_builder("life")
-                        .arg(&buffer_in)
-                        .arg(&buffer_out)
+    let kernel = pro_que.kernel_builder("life").arg(&buffer_in).arg(&buffer_out)
                         .build().unwrap();
 
     // main loop
@@ -55,6 +52,7 @@ fn main() {
 
     for iteration in 1..=iter_max {
         println!("{}/{}", iteration, iter_max);
+
         let mut next_board = vec![0u8; WIDTH*HEIGHT];
 
         buffer_in.write(&board).enq().unwrap();
