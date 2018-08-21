@@ -33,9 +33,7 @@ fn main() {
     // initialize and save first board
     randomize(&mut board);
 
-    tx.send( Some( (0, board.to_vec()) ) ).unwrap();
-    // png_write(0, board.to_vec()).unwrap();
-
+    png_write(0, board.to_vec()).unwrap();
 
     let cl_source = include_str!("life.cl");
 
@@ -77,49 +75,6 @@ fn main() {
     // kill the thread and clean up
     tx.send(None).expect("Failed to send on pipe!");
     writer_thread.join().expect("Thread panicked!");
-}
-
-// core game logic
-fn game_of_life(board: &[u8], next_board: &mut [u8], r: usize, c: usize) {
-    // there's an overflow chance here, but as long as the gameboard only holds ones or zeros
-    // it shouldn't be an issue
-    let count_neighbors: u8 = [
-        get_offset(&board, r, c,  0,  1),
-        get_offset(&board, r, c,  1,  1),
-        get_offset(&board, r, c,  1,  0),
-        get_offset(&board, r, c,  1, -1),
-        get_offset(&board, r, c,  0, -1),
-        get_offset(&board, r, c, -1, -1),
-        get_offset(&board, r, c, -1,  0),
-        get_offset(&board, r, c, -1,  1),
-    ].iter().sum();
-
-    // set the cell at offset (r, c) to a value based on count_neighbors
-    if get_offset(&board, r, c, 0, 0) != 0 { // live cell
-        if count_neighbors == 2 ||  count_neighbors == 3 {
-            next_board[r*WIDTH + c] = 1
-        } else {
-            next_board[r*WIDTH + c] = 0
-        }
-    } else { // dead cell
-        if count_neighbors == 3 {
-            next_board[r*WIDTH + c] = 1
-        } else {
-            next_board[r*WIDTH + c] = 0
-        }
-    }
-}
-
-fn get_offset(board: &[u8], r: usize, c: usize, dc: i32, dr: i32) -> u8 {
-    let row = r as i32 + dr;
-    let col = c as i32 + dc;
-
-    // bounds check
-    if row < 0 || row >= HEIGHT as i32 || col < 0 || col >= WIDTH as i32 {
-        0
-    } else {
-        board[row as usize * WIDTH + col as usize]
-    }
 }
 
 fn randomize(board: &mut [u8]) {
