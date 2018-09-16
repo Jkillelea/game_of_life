@@ -1,5 +1,6 @@
 #![allow(warnings)]
 extern crate rand;
+#[cfg(feature = "opencl")] 
 extern crate ocl;
 extern crate png;
 
@@ -11,8 +12,11 @@ use std::path::Path;
 use std::fs::{self, File};
 use png::HasParameters;
 
-const WIDTH:    usize = 1920;
-const HEIGHT:   usize = 1080;
+mod cl_impl;
+
+// screen width, height, and default iterations
+const WIDTH:            usize = 1920;
+const HEIGHT:           usize = 1080;
 const DEFAULT_ITER_MAX: usize = 100;
 
 fn main() {
@@ -36,17 +40,7 @@ fn main() {
     png_write(0, board.to_vec()).unwrap();
 
     #[cfg(feature = "opencl")] 
-    let (kernel, buffer_in, buffer_out) = {
-        // OpenCL initialization
-        let cl_source = include_str!("life.cl");
-        let pro_que = ocl::ProQue::builder().src(cl_source).dims((WIDTH, HEIGHT))
-                                    .build().unwrap();
-        let buffer_in = pro_que.create_buffer::<u8>().unwrap();
-        let buffer_out = pro_que.create_buffer::<u8>().unwrap();
-        let kernel = pro_que.kernel_builder("life").arg(&buffer_in).arg(&buffer_out)
-                            .build().unwrap();
-        (kernel, buffer_in, buffer_out)
-    };
+    let cl_runner = cl_impl::CL::new(include_str!("life.cl")).unwrap();
 
     // main loop
     let start = std::time::Instant::now();
@@ -56,13 +50,13 @@ fn main() {
 
         let mut next_board = vec![0u8; WIDTH*HEIGHT];
 
-        #[cfg(feature = "opencl")] {
-            buffer_in.write(&board).enq().unwrap();
-            unsafe { kernel.enq().unwrap() };
-            buffer_out.read(&mut next_board).enq().unwrap();
+        #[cfg(feature = "opencl")] { // OpenCL implementation
+            cl_runner.write(&board).unwrap();
+            cl_runner.enq_kernel().unwrap();
+            cl_runner.read(&mut next_board).unwrap();
         }
 
-        #[cfg(not(feature = "opencl"))]
+        #[cfg(not(feature = "opencl"))] // default serial implementation
         for (i, _) in board.iter().enumerate() {
             let (row, col) = (i / WIDTH, i % WIDTH);
             game_of_life(&board, &mut next_board, row, col);
@@ -84,7 +78,7 @@ fn main() {
 
 // serial version of core game logic
 fn game_of_life(board: &[u8], next_board: &mut [u8], r: usize, c: usize) {
-    // there's an overflow chance here, but as long as the gameboard only holds ones or zeros
+    // there's a u8 overflow chance here, but as long as the gameboard only holds ones or zeros
     // it shouldn't be an issue
     let count_neighbors: u8 = [
         get_offset(&board, r, c,  0,  1),
