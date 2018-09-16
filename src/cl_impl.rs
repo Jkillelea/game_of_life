@@ -22,13 +22,11 @@ impl CL {
                                 .arg(&buffer_in)
                                 .arg(&buffer_out)
                                 .build()?;
-        let cl = CL {
+        Ok(CL {
             kernel,
             buffer_in,
             buffer_out,
-        };
-
-        Ok(cl)
+        })
     }
 
     pub fn write(&self, data: &[u8]) -> ocl::Result<()> {
