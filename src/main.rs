@@ -35,17 +35,18 @@ fn main() {
 
     png_write(0, board.to_vec()).unwrap();
 
-    // OpenCL initialization
-    let cl_source = include_str!("life.cl");
-
-    let pro_que = ocl::ProQue::builder().src(cl_source).dims((WIDTH, HEIGHT))
-                                .build().unwrap();
-
-    let buffer_in = pro_que.create_buffer::<u8>().unwrap();
-    let buffer_out = pro_que.create_buffer::<u8>().unwrap();
-
-    let kernel = pro_que.kernel_builder("life").arg(&buffer_in).arg(&buffer_out)
-                        .build().unwrap();
+    #[cfg(feature = "opencl")] 
+    let (kernel, buffer_in, buffer_out) = {
+        // OpenCL initialization
+        let cl_source = include_str!("life.cl");
+        let pro_que = ocl::ProQue::builder().src(cl_source).dims((WIDTH, HEIGHT))
+                                    .build().unwrap();
+        let buffer_in = pro_que.create_buffer::<u8>().unwrap();
+        let buffer_out = pro_que.create_buffer::<u8>().unwrap();
+        let kernel = pro_que.kernel_builder("life").arg(&buffer_in).arg(&buffer_out)
+                            .build().unwrap();
+        (kernel, buffer_in, buffer_out)
+    };
 
     // main loop
     let start = std::time::Instant::now();
@@ -55,11 +56,17 @@ fn main() {
 
         let mut next_board = vec![0u8; WIDTH*HEIGHT];
 
-        buffer_in.write(&board).enq().unwrap();
+        #[cfg(feature = "opencl")] {
+            buffer_in.write(&board).enq().unwrap();
+            unsafe { kernel.enq().unwrap() };
+            buffer_out.read(&mut next_board).enq().unwrap();
+        }
 
-        unsafe { kernel.enq().unwrap() };
-
-        buffer_out.read(&mut next_board).enq().unwrap();
+        #[cfg(not(feature = "opencl"))]
+        for (i, _) in board.iter().enumerate() {
+            let (row, col) = (i / WIDTH, i % WIDTH);
+            game_of_life(&board, &mut next_board, row, col);
+        }
 
         tx.send(Some((iteration, next_board.to_vec())))
            .expect("Failed to send on pipe!");
