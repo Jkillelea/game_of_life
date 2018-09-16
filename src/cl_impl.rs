@@ -8,7 +8,6 @@ pub struct CL {
     kernel:     ocl::Kernel,
     buffer_in:  ocl::Buffer<u8>,
     buffer_out: ocl::Buffer<u8>,
-
 }
 
 impl CL {
@@ -17,7 +16,6 @@ impl CL {
                                    .src(kernel_source)
                                    .dims((WIDTH, HEIGHT))
                                    .build()?;
-
         let buffer_in  = pro_que.create_buffer::<u8>()?;
         let buffer_out = pro_que.create_buffer::<u8>()?;
         let kernel     = pro_que.kernel_builder("life")
