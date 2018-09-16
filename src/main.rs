@@ -23,9 +23,9 @@ fn main() {
     let mut board = vec![0u8; WIDTH*HEIGHT];
     let (tx, rx) = mpsc::channel();
     let iter_max: usize = env::args().nth(1)
-                                     .unwrap_or(format!("{}", DEFAULT_ITER_MAX))
+                                     .unwrap_or("None".into())
                                      .parse()
-                                     .unwrap();
+                                     .unwrap_or(DEFAULT_ITER_MAX);
 
     // thread for saving all the images
     let writer_thread = thread::spawn(move || {
@@ -50,16 +50,16 @@ fn main() {
 
         let mut next_board = vec![0u8; WIDTH*HEIGHT];
 
-        #[cfg(feature = "opencl")] { // OpenCL implementation
-            cl_runner.write(&board).unwrap();
-            cl_runner.enq_kernel().unwrap();
-            cl_runner.read(&mut next_board).unwrap();
-        }
-
         #[cfg(not(feature = "opencl"))] // default serial implementation
         for (i, _) in board.iter().enumerate() {
             let (row, col) = (i / WIDTH, i % WIDTH);
             game_of_life(&board, &mut next_board, row, col);
+        }
+
+        #[cfg(feature = "opencl")] { // OpenCL implementation
+            cl_runner.write(&board).unwrap();
+            cl_runner.enq_kernel().unwrap();
+            cl_runner.read(&mut next_board).unwrap();
         }
 
         tx.send(Some((iteration, next_board.to_vec())))
