@@ -12,6 +12,7 @@ use std::path::Path;
 use std::fs::{self, File};
 use png::HasParameters;
 
+// OpenCL implementation
 mod cl_impl;
 
 // screen width, height, and default iterations
