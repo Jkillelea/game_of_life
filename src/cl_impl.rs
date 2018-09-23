@@ -11,14 +11,14 @@ pub struct CL {
 }
 
 impl CL {
-    pub fn new(kernel_source: &str) -> ocl::Result<CL> {
+    pub fn new(kernel_source: &str, kernel_name: &str) -> ocl::Result<CL> {
         let pro_que = ocl::ProQue::builder()
                                    .src(kernel_source)
                                    .dims((WIDTH, HEIGHT))
                                    .build()?;
         let buffer_in  = pro_que.create_buffer::<u8>()?;
         let buffer_out = pro_que.create_buffer::<u8>()?;
-        let kernel     = pro_que.kernel_builder("life")
+        let kernel     = pro_que.kernel_builder(kernel_name)
                                 .arg(&buffer_in)
                                 .arg(&buffer_out)
                                 .build()?;

@@ -41,7 +41,7 @@ fn main() {
     png_write(0, board.to_vec()).unwrap();
 
     #[cfg(feature = "opencl")] 
-    let cl_runner = cl_impl::CL::new(include_str!("life.cl")).unwrap();
+    let cl_runner = cl_impl::CL::new(include_str!("life.cl"), "life").unwrap();
 
     // main loop
     let start = std::time::Instant::now();
