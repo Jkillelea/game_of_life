@@ -1,4 +1,9 @@
-#![allow(warnings)]
+// A simple Game of Life implementation. Copyright Jacob Killelea
+
+// Will otherwise throw warnings because of conditional compilation skipping
+// certain functions
+#![allow(unused)]
+
 extern crate rand;
 #[cfg(feature = "opencl")] 
 extern crate ocl;
@@ -64,7 +69,7 @@ fn main() {
         }
 
         tx.send(Some((iteration, next_board.to_vec())))
-           .expect("Failed to send on pipe!");
+           .expect("Failed to send image on pipe!");
 
         board = next_board;
     }
@@ -73,7 +78,7 @@ fn main() {
     println!("--Completed in {:?}--", end-start);
 
     // kill the thread and clean up
-    tx.send(None).expect("Failed to send on pipe!");
+    tx.send(None).expect("Failed to send kill message on pipe!");
     writer_thread.join().expect("Thread panicked!");
 }
 
@@ -122,7 +127,7 @@ fn get_offset(board: &[u8], r: usize, c: usize, dc: i32, dr: i32) -> u8 {
 
 
 fn randomize(board: &mut [u8]) {
-    for mut val in board.iter_mut() {
+    for mut val in board.iter_mut() { // val is a &mut u8
         *val = if rand::random::<u8>() % 2 == 0 {
             1
         } else {
@@ -132,6 +137,7 @@ fn randomize(board: &mut [u8]) {
 }
 
 // all the image writing. Most of this code is taken from the png crate readme
+// TODO: This is the slowest thing in the program. Fix?
 fn png_write(name: usize, data: Vec<u8>) -> io::Result<()> {
     let _ = fs::create_dir("images");
     let pathname = format!("images/{}.png", name);
