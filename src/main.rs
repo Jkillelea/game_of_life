@@ -9,6 +9,9 @@ extern crate rand;
 extern crate ocl;
 extern crate png;
 
+extern crate rayon;
+use rayon::prelude::*;
+
 use std::io;
 use std::env;
 use std::thread;
@@ -56,11 +59,18 @@ fn main() {
 
         let mut next_board = vec![0u8; WIDTH*HEIGHT];
 
-        #[cfg(not(feature = "opencl"))] // default serial implementation
+        #[cfg(not(any(feature = "opencl", feature = "rayon_impl")))] // default serial implementation
         for (i, _) in board.iter().enumerate() {
             let (row, col) = (i / WIDTH, i % WIDTH);
             game_of_life(&board, &mut next_board, row, col);
         }
+
+        #[cfg(feature = "rayon_impl")] // rayon multithreading implementation
+        let next_board: Vec<u8> = board.par_iter().enumerate().map(|(i, _)| {
+            let (row, col) = (i / WIDTH, i % WIDTH);
+            game_of_life_rayon(&board, row, col)
+        }).collect();
+
 
         #[cfg(feature = "opencl")] { // OpenCL implementation
             cl_runner.write(&board).unwrap();
@@ -109,6 +119,37 @@ fn game_of_life(board: &[u8], next_board: &mut [u8], r: usize, c: usize) {
             next_board[r*WIDTH + c] = 1
         } else {
             next_board[r*WIDTH + c] = 0
+        }
+    }
+}
+
+// rayon version of core game logic
+fn game_of_life_rayon(board: &[u8], r: usize, c: usize) -> u8 {
+    // there's a u8 overflow chance here, but as long as the gameboard only holds ones or zeros
+    // it shouldn't be an issue
+    let count_neighbors: u8 = [
+        get_offset(&board, r, c,  0,  1),
+        get_offset(&board, r, c,  1,  1),
+        get_offset(&board, r, c,  1,  0),
+        get_offset(&board, r, c,  1, -1),
+        get_offset(&board, r, c,  0, -1),
+        get_offset(&board, r, c, -1, -1),
+        get_offset(&board, r, c, -1,  0),
+        get_offset(&board, r, c, -1,  1),
+    ].iter().sum();
+
+    // set the cell at offset (r, c) to a value based on count_neighbors
+    if get_offset(&board, r, c, 0, 0) != 0 { // live cell
+        if count_neighbors == 2 ||  count_neighbors == 3 {
+            1
+        } else {
+            0
+        }
+    } else { // dead cell
+        if count_neighbors == 3 {
+            1
+        } else {
+            0
         }
     }
 }
